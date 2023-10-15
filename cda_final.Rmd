@@ -1,0 +1,362 @@
+---
+title: "cda_final"
+date: "2023/6/2"
+output: html_document
+---
+
+```{r setup, include=FALSE,warning=F}
+knitr::opts_chunk$set(echo = TRUE)
+options(digits=5)
+library(car)
+library(MASS)
+library(brglm2)
+library(tidyverse)
+library(dplyr)
+library(corrplot)
+library(pROC)
+```
+
+```{r}
+data <- read.csv("train_cleaned.csv", header = T)
+```
+
+
+#### Correlation 
+```{r,fig.height=6.5, fig.width=6.5, fig.align="center"}
+data <- data[,-1]
+colnames(data) <- c("x1","x2","x3","x4","x5","x6","x7","x8","x9",
+                    "x10","x11","x12","x13","x14","x15","x16","x17","x18",
+                    "x19","x20","x21","x22","y")
+data_fac <- data
+cor <- data.frame (round(cor(data[,1:23],method = "spearman"),2))
+corrplot(cor(data[,1:23]), method = 'color', addCoef.col = 'black', type = 'upper', tl.srt = 45, number.cex = .5, number.font = 1,tl.col = "black")
+```
+
+\newpage 
+
+### Quasi-seperation 處理資料  
+
+因為有出現x=0, y=0 時的樣本數為0 ，因此需要處理它，避免造成之後模型產生quasi-complete separation，處理方式為合併至下一個level. 
+
+#### X10
+```{r}
+xtabs(~x10+ y, data=data_fac)
+for (i in c(1:length(data_fac$x10))){
+  data_fac$x10[i] <- ifelse(data_fac$x10[i]==0, 1, next)
+}
+xtabs(~x10+ y, data=data_fac)
+```
+ 
+#### X14
+```{r}
+#xtabs(~x14+ y, data=data_fac)
+for (i in c(1:length(data_fac$x14))){
+   data_fac$x14[i] <- ifelse(data_fac$x14[i]==0, 1, next)
+}
+xtabs(~x14+ y, data=data_fac)
+```
+
+#### X15
+```{r}
+#xtabs(~x15+ y, data=data_fac)
+for (i in c(1:length(data_fac$x15))){
+   data_fac$x15[i] <- ifelse(data_fac$x15[i]==0, 1, next)
+}
+xtabs(~x15+ y, data=data_fac)
+```
+#### X19
+```{r}
+#xtabs(~x19+ y, data=data_fac)
+for (i in c(1:length(data_fac$x19))){
+   data_fac$x19[i] <- ifelse(data_fac$x19[i]==0, 1, next)
+}
+xtabs(~x19+ y, data=data_fac)
+```
+
+\newpage 
+#### X20
+```{r}
+#xtabs(~x20+ y, data=data_fac)
+for (i in c(1:length(data_fac$x20))){
+   data_fac$x20[i] <- ifelse(data_fac$x20[i]==0, 1, next)
+}
+xtabs(~x20+ y, data=data_fac)
+```
+
+## Model_1    
+以讓effect 顯著為目的，用LRT檢定模型表現  
+
+### Full Model
+```{r}
+data_fac[1:23] = lapply(data_fac[1:23], factor)
+full_model <- glm(y~ .,family=binomial,data=data_fac)
+summary(full_model)
+formula(full_model)
+```
+
+### Only significance effect
+```{r}
+fit <- glm(y~ . -x1-x6-x21,family=binomial,data=data_fac)
+summary(fit)
+```
+
+### Transformation:
+#### X9  
+將levels=12的合併為0:
+```{r}
+data_tran <- data_fac
+data_tran$x9 <- fct_recode(data_fac$x9, "0"="1","0"="2")
+fit_tranx9 <- glm(y~ . -x1-x6-x21,family=binomial,data=data_tran)
+summary(fit_tranx9)
+```
+
+#### LRT for x9
+```{r}
+anova(fit_tranx9, fit, test="LRT")
+```
+
+Conclusion: Better performance. 
+
+#### X10  
+將levels=23的合併為1 :
+```{r}
+data_tran$x10 <- fct_recode(data_fac$x10, "1"="2","1"="3")
+fit_tranx10 <- glm(y~ . -x6-x1-x21,family=binomial,data=data_tran)
+summary(fit_tranx10)
+```
+
+#### LRT for x10
+```{r}
+anova(fit_tranx10, fit_tranx9, test="LRT")
+```
+
+Conclusion: No need for transformation 
+
+#### X13  
+將levels=5的合併至1 :
+```{r}
+data_tran$x10 <- data_fac$x10
+data_tran$x13 <- fct_recode(data_fac$x13, "1"="5")
+fit_tranx13 <- glm(y~ . -x6-x1-x21,family=binomial,data=data_tran)
+summary(fit_tranx13)
+```
+
+#### LRT for x13
+```{r}
+anova(fit_tranx13, fit_tranx9, test="LRT")
+```
+
+Conclusion: Better performance. 
+
+#### X15   
+將levels=2的合併至1:
+```{r}
+data_tran$x15 <- fct_recode(data_fac$x15, "1"="2")
+fit_tranx15 <- glm(y~ . -x6-x1-x21,family=binomial,data=data_tran)
+summary(fit_tranx15)
+```
+
+#### LRT for x15
+```{r}
+anova(fit_tranx15, fit_tranx13, test="LRT")
+```
+
+Conclusion: Better performance after transformation. 
+
+#### X16 
+將levels=5的合併至4:
+```{r}
+data_tran$x16 <- fct_recode(data_fac$x16, "3"="1", "3"="2")
+fit_tranx16 <- glm(y~ . -x6-x1-x21,family=binomial,data=data_tran)
+summary(fit_tranx16)
+```
+
+#### LRT for x16
+```{r}
+anova(fit_tranx16, fit_tranx15, test="LRT")
+data_tran$x16 <- data_fac$x16
+```
+
+Conclusion: No need for transformation.  
+
+#### X20   
+將levels=2的合併至1:
+```{r}
+data_tran$x20 <- fct_recode(data_fac$x20, "1"="2")
+fit_tranx20 <- glm(y~ . -x6-x1-x21,family=binomial,data=data_tran)
+summary(fit_tranx20)
+```
+
+#### LRT for x20
+```{r}
+anova(fit_tranx20, fit_tranx15, test="LRT")
+anova(fit_tranx20, fit, test="LRT")
+anova(fit_tranx20, full_model, test="LRT")
+```
+
+Conclusion: Better performance. 
+
+### Conclusion for Model1  
+- x9 (Ease of Online booking):(0)(1)(2)(3)(4)(5) $\to$ (012)(3)(4)(5)
+- X13 (Seat comfort):(1)(2)(3)(4)(5) $\to$ (15)(2)(3)(4) 
+- X15 (On-board service):(1)(2)(3)(4)(5) $\to$ (12)(3)(4)(5)
+- X20 (Cleanliness):(1)(2)(3)(4)(5) $\to$ (12)(3)(4)(5)
+```{r}
+formula(fit_tranx20)
+summary(fit_tranx20)
+```
+
+#### Fit the test data
+#### Transform the data
+```{r}
+data_test <- read.csv("test_cleaned(1).csv", header = T)
+data_test <- data_test[,-1]
+colnames(data_test) <- c("x1","x2","x3","x4","x5","x6","x7","x8","x9",
+                    "x10","x11","x12","x13","x14","x15","x16","x17","x18",
+                    "x19","x20","x21","x22","y")
+```
+
+
+```{r}
+#xtabs(~x14+ y, data=data_test)
+for (i in c(1:length(data_test$x14))){
+  data_test$x14[i] <- ifelse(data_test$x14[i]==0, 1, next)
+}
+
+#xtabs(~x15+ y, data=data_test)
+for (i in c(1:length(data_test$x15))){
+  data_test$x15[i] <- ifelse(data_test$x15[i]==0, 1, next)
+}
+
+#xtabs(~x19+ y, data=data_test)
+for (i in c(1:length(data_test$x19))){
+  data_test$x19[i] <- ifelse(data_test$x19[i]==0, 1, next)
+}
+```
+
+
+```{r}
+data_test[1:23] = lapply(data_test[1:23], factor)
+data_test_fac <- data_test
+data_test_fac$x9 <- fct_recode(data_test$x9, "0"="1","0"="2")
+data_test_fac$x13 <- fct_recode(data_test$x13, "1"="5")
+data_test_fac$x15 <- fct_recode(data_test$x15, "1"="2")
+data_test_fac$x20 <- fct_recode(data_test$x20, "1"="2")
+```
+
+#### Prediction 
+```{r}
+probabilities <- fit_tranx20 %>% predict(data_test_fac, type = "response")
+predicted.classes <- ifelse(probabilities > 0.5, 1, 0) #看要設多少
+mean(predicted.classes == data_test_fac$y) #accuracy
+confusion_matrix <- matrix(xtabs(~ data_test_fac$y + predicted.classes),nrow=2)
+confusion_matrix
+```
+
+```{r}
+rocplot <- roc(y ~ probabilities, data=data_test_fac)
+plot.roc(rocplot, legacy.axes=TRUE) # 不確定要不要放圖
+auc(rocplot)
+```
+
+
+### Model-2
+#### Stepwise logistic regression  
+
+使用AIC 當作指標  
+```{r}
+# step_model <- step(full_model, direction = "backward", trace=1)
+# summary(step_model)
+# formula(step_model)
+step_model <- glm(y ~ x1+x2+x3+x4+x5+x6+x7+x8+x9+x10+x11+x12+x13+x14+x15+x16
+                  +x17+x18+x19+x20+x22, family = binomial, data = data_fac)
+```
+
+#### Prediction 
+```{r}
+probabilities <- step_model %>% predict(data_test, type = "response")
+predicted.classes <- ifelse(probabilities > 0.5, 1, 0) #看要設多少
+mean(predicted.classes == data_test$y) #accuracy
+confusion_matrix <- matrix(xtabs(~ data_test$y + predicted.classes),nrow=2)
+confusion_matrix
+```
+
+```{r}
+rocplot <- roc(y ~ probabilities, data=data_test)
+plot.roc(rocplot, legacy.axes=TRUE) # 不確定要不要放圖
+auc(rocplot)
+```
+
+### Model-3
+#### consider the collinearity  
+
+使用AIC 當作指標  
+#### GVIF
+```{r}
+library(glmtoolbox)
+gvif(full_model)
+```
+#### Remove x14
+```{r}
+fit3_tran14 <- glm(y~ . -x14,family=binomial,data=data_fac)
+summary(fit3_tran14) 
+gvif(fit3_tran14)
+```
+#### Remove x9
+```{r}
+fit3_tran9 <- glm(y~ . -x9,family=binomial,data=data_fac)
+summary(fit3_tran9) 
+gvif(fit3_tran9)
+```
+#### Remove x9,x14
+```{r}
+fit3_tran914 <- glm(y~ . -x9-x14,family=binomial,data=data_fac)
+summary(fit3_tran914)
+gvif(fit3_tran914)
+```
+#### Choose model
+By AIC of three models,fit3_tran9 is better since its the smallest AIC.
+
+#### Fit the test data
+```{r}
+data_test3 <- read.csv("test_cleaned(1).csv", header = T)
+data_test3 <- data_test3[,-1]
+colnames(data_test3) <-c("x1","x2","x3","x4","x5","x6","x7","x8","x9","x10","x11","x12","x13","x14","x15","x16","x17","x18","x19","x20","x21","x22","y")
+```
+
+
+```{r}
+#xtabs(~x14+ y, data=data_test)
+for (i in c(1:length(data_test3$x14))){
+  data_test3$x14[i] <- ifelse(data_test3$x14[i]==0, 1, next)
+}
+
+#xtabs(~x15+ y, data=data_test)
+for (i in c(1:length(data_test3$x15))){
+  data_test3$x15[i] <- ifelse(data_test3$x15[i]==0, 1, next)
+}
+
+#xtabs(~x19+ y, data=data_test)
+for (i in c(1:length(data_test3$x19))){
+  data_test3$x19[i] <- ifelse(data_test3$x19[i]==0, 1, next)
+}
+```
+
+
+#### Prediction
+```{r}
+probabilities3 <- fit3_tran9%>% predict(data_test, type = "response")
+predicted.classes3 <- ifelse(probabilities3 > 0.5, 1, 0) #看要設多少
+mean(predicted.classes3 == data_test$y) #accuracy
+confusion_matrix3 <- matrix(xtabs(~ data_test$y + predicted.classes3),nrow=2)
+confusion_matrix3
+```
+
+```{r}
+rocplot <- roc(y ~ probabilities3, data=data_test)
+plot.roc(rocplot, legacy.axes=TRUE) # 不確定要不要放圖
+auc(rocplot)
+```
+
+
+
